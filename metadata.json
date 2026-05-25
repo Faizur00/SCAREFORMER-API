@@ -1,6 +1,0 @@
-{
-  "name": "Scar Classification API",
-  "description": "A generated Python FastAPI project for classifying Hypertrophic vs Keloid scar images via a TFLite model, pre-configured for Railway deployment.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
