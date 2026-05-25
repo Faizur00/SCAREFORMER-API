@@ -2,6 +2,7 @@ import os
 import io
 import numpy as np
 from PIL import Image
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -11,7 +12,31 @@ try:
 except ImportError:
     import tensorflow.lite as tflite
 
+MODEL_PATH = "model/scar_model.tflite"
+CLASS_NAMES = ["Hypertrophic", "Keloid"]
+
+interpreter = None
+input_details = None
+output_details = None
+
+async def load_model():
+    global interpreter, input_details, output_details
+    if os.path.exists(MODEL_PATH):
+        interpreter = tflite.Interpreter(model_path=MODEL_PATH)
+        interpreter.allocate_tensors()
+        input_details = interpreter.get_input_details()
+        output_details = interpreter.get_output_details()
+        print("Model loaded successfully.")
+    else:
+        print(f"Warning: Model file not found at {MODEL_PATH}. Prediction endpoints will return 503 until uploaded.")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await load_model()
+    yield
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Scar Classification API",
     description="API for classifying scar images into Hypertrophic or Keloid using a TFLite model.",
     version="1.0.0"
@@ -25,25 +50,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-MODEL_PATH = "model/scar_model.tflite"
-CLASS_NAMES = ["Hypertrophic", "Keloid"]
-
-interpreter = None
-input_details = None
-output_details = None
-
-@app.on_event("startup")
-async def load_model():
-    global interpreter, input_details, output_details
-    if os.path.exists(MODEL_PATH):
-        interpreter = tflite.Interpreter(model_path=MODEL_PATH)
-        interpreter.allocate_tensors()
-        input_details = interpreter.get_input_details()
-        output_details = interpreter.get_output_details()
-        print("Model loaded successfully.")
-    else:
-        print(f"Warning: Model file not found at {MODEL_PATH}. Prediction endpoints will return 503 until uploaded.")
 
 def preprocess_image(image_bytes: bytes, target_shape):
     """
