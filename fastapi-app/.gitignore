@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+venv/
+env/
+
+# Ignore the actual heavy tflite model binaries if you rely on LFS,
+# otherwise comment this out if you intend to directly commit models.
+# *.tflite
+
+.pytest_cache/
