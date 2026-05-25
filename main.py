@@ -33,9 +33,10 @@ interpreter = None
 input_details = None
 output_details = None
 
-@app.on_event("startup")
-async def load_model():
+def load_model():
     global interpreter, input_details, output_details
+    if interpreter is not None:
+        return
     if os.path.exists(MODEL_PATH):
         interpreter = tflite.Interpreter(model_path=MODEL_PATH)
         interpreter.allocate_tensors()
@@ -67,12 +68,12 @@ def read_root():
     return {
         "status": "active",
         "message": "Scar Classification API is running.",
-        "model_loaded": interpreter is not None,
         "instructions": "Send a POST request with an image file to /predict/."
     }
 
 @app.post("/predict/")
 async def predict(file: UploadFile = File(...)):
+    load_model()
     if interpreter is None:
         raise HTTPException(status_code=503, detail="Model not loaded. Please ensure scar_model.tflite is in the /model directory.")
         
