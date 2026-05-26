@@ -5,11 +5,13 @@ from PIL import Image
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-# Try to import tflite_runtime first, fallback to standard tensorflow if needed
 try:
     import tflite_runtime.interpreter as tflite
 except ImportError:
-    import tensorflow.lite as tflite
+    try:
+        import ai_edge_litert.interpreter as tflite
+    except ImportError:
+        import tensorflow.lite as tflite
 
 app = FastAPI(
     title="Scar Classification API",
