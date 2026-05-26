@@ -4,6 +4,81 @@ A FastAPI service designed to run local, real-time inference on a TensorFlow Lit
 
 ---
 
+## Quick Start (Local Dev)
+
+```bash
+# Setup
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Run the API + ngrok tunnel
+bash run.sh
+```
+
+You'll see output like:
+```
+🚀 Starting FastAPI server on port 8000...
+🔗 Starting ngrok tunnel to port 8000...
+✅ Ngrok tunnel active at: https://xxxx-xx-xxx-xxx-xxx.ngrok-free.app
+📋 API Root:   https://xxxx-xx-xxx-xxx-xxx.ngrok-free.app/
+📋 Predict:    https://xxxx-xx-xxx-xxx-xxx.ngrok-free.app/predict/
+```
+
+Share that `ngrok-free.app` URL with anyone — they can hit your API without running the server locally.
+
+---
+
+## Ngrok Tunneling (Remote Access)
+
+While the FastAPI server runs locally on `http://localhost:8000`, `run.sh` automatically creates a **public ngrok tunnel** so your friends can test the API from anywhere during development.
+
+### Prerequisites
+
+Install ngrok (one-time):
+
+```bash
+# Arch Linux
+yay -S ngrok
+# or
+paru -S ngrok
+
+# Linux (Debian/Ubuntu)
+curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+sudo apt update && sudo apt install ngrok
+
+# macOS
+brew install ngrok
+```
+
+### Authentication
+
+Sign up at [ngrok.com](https://ngrok.com) (free), then authenticate:
+
+```bash
+ngrok config add-authtoken YOUR_AUTH_TOKEN
+```
+
+> **Without authentication**, ngrok still works but shows a banner page before your API. The free plan gives you a random URL each restart and ~40 connections/minute — fine for dev testing.
+
+### How It Works
+
+1. `run.sh` starts **uvicorn** on `localhost:8000`
+2. `run.sh` starts **ngrok** via `pyngrok`, creating a secure tunnel to `localhost:8000`
+3. The public URL is printed to the console
+4. Press `Ctrl+C` to stop both the server and tunnel
+
+### Rate Limits (Free Plan)
+
+| Limit | Value |
+| :--- | :--- |
+| Connections per minute | 40 |
+| Tunnel lifetime | 2 hrs (auto-restart with new URL) |
+| Custom subdomains | Paid only |
+
+---
+
 ## API Capabilities and Design
 
 * **Dual-Class Classification:** Specifically maps images of scars to `"Hypertrophic"` or `"Keloid"` outputs.
@@ -63,187 +138,3 @@ Submit raw file records directly to have the system parse, pre-process, calculat
 
 ---
 
-## Web Frontend Integration Guide
-
-Below are production-ready recipes for frontend developers accessing your deployed API.
-
-### 1. Asynchronous JavaScript Standard HTTP Integration
-
-```javascript
-/**
- * Analyze an image using the Scar Classification API.
- * @param {File} imageFile - Local image file object acquired from an HTML file input element.
- * @param {string} apiBaseUrl - Base Host URL of your deployed Railway endpoint.
- * @returns {Promise<object>} Returns categorization and probability weights.
- */
-async function classifyScarImage(imageFile, apiBaseUrl) {
-  if (!imageFile) {
-    throw new Error('Please select an image file first.');
-  }
-
-  // Create standard multipart payload
-  const payload = new FormData();
-  // Ensure the field name is 'file' to match FastAPI's route requirement
-  payload.append('file', imageFile);
-
-  try {
-    const targetEndpoint = `${apiBaseUrl.replace(/\/$/, '')}/predict/`;
-    
-    const response = await fetch(targetEndpoint, {
-      method: 'POST',
-      body: payload,
-      // Note: Leave headers empty. The browser automatically generates 
-      // the 'multipart/form-data' boundary code structure.
-    });
-
-    if (!response.ok) {
-      const errorPayload = await response.json().catch(() => ({}));
-      throw new Error(errorPayload.detail || `Server responded with status: ${response.status}`);
-    }
-
-    const output = await response.json();
-    return {
-      prediction: output.prediction,
-      confidence: output.confidence,
-      percentages: {
-        hypertrophic: output.all_scores.Hypertrophic * 100,
-        keloid: output.all_scores.Keloid * 100
-      }
-    };
-  } catch (error) {
-    console.error('Inference Service API Error:', error);
-    throw error;
-  }
-}
-```
-
-### 2. Clean React Integration Core Component (Tailwind CSS)
-
-```tsx
-import React, { useState } from 'react';
-
-interface PredictionResult {
-  prediction: string;
-  confidence: number;
-  all_scores: {
-    Hypertrophic: number;
-    Keloid: number;
-  };
-}
-
-export function ScarInferenceUI({ apiUrl }: { apiUrl: string }) {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [data, setData] = useState<PredictionResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
-      setData(null);
-      setErr(null);
-    }
-  };
-
-  const handlePredict = async () => {
-    if (!selectedFile) return;
-    setLoading(true);
-    setErr(null);
-
-    const fd = new FormData();
-    fd.append('file', selectedFile);
-
-    try {
-      const response = await fetch(`${apiUrl}/predict/`, {
-        method: 'POST',
-        body: fd
-      });
-      if (!response.ok) throw new Error('Model returned an evaluation error.');
-      const result: PredictionResult = await response.json();
-      setData(result);
-    } catch (error: any) {
-      setErr(error.message || 'Error executing request.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="max-w-md mx-auto p-6 bg-neutral-900 border border-neutral-800 rounded-xl shadow">
-      <h2 className="text-lg font-semibold text-neutral-100 mb-4">Scar Classification</h2>
-      
-      <input 
-        type="file" 
-        accept="image/*" 
-        onChange={onFileSelected} 
-        className="block w-full text-sm text-neutral-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-neutral-800 file:text-neutral-200 hover:file:bg-neutral-700 cursor-pointer mb-4" 
-      />
-
-      {previewUrl && (
-        <div className="relative aspect-video rounded-lg overflow-hidden border border-neutral-800 mb-4 bg-black">
-          <img src={previewUrl} alt="Scar Preview" className="object-contain w-full h-full" />
-        </div>
-      )}
-
-      {selectedFile && (
-        <button
-          onClick={handlePredict}
-          disabled={loading}
-          className="w-full bg-emerald-600 text-white py-2 rounded-lg font-medium hover:bg-emerald-500 disabled:opacity-50 transition-colors"
-        >
-          {loading ? 'Evaluating details...' : 'Analyze Image'}
-        </button>
-      )}
-
-      {err && (
-        <div className="mt-4 p-3 bg-red-950/40 border border-red-900 text-red-300 text-xs rounded-lg">
-          {err}
-        </div>
-      )}
-
-      {data && (
-        <div className="mt-4 p-4 bg-neutral-950 rounded-lg border border-neutral-800 text-sm">
-          <div className="flex justify-between items-center mb-3">
-            <span className="text-neutral-400">Class Label:</span>
-            <span className="font-bold text-emerald-400">{data.prediction}</span>
-          </div>
-          <div className="flex justify-between items-center mb-4">
-            <span className="text-neutral-400">Confidence Match:</span>
-            <span className="font-mono text-neutral-200">{(data.confidence * 100).toFixed(2)}%</span>
-          </div>
-          
-          <div className="space-y-2 border-t border-neutral-800 pt-3 text-xs">
-            <div>
-              <div className="flex justify-between text-neutral-400 mb-1">
-                <span>Hypertrophic:</span>
-                <span>{(data.all_scores.Hypertrophic * 100).toFixed(1)}%</span>
-              </div>
-              <div className="w-full bg-neutral-800 h-1.5 rounded">
-                <div 
-                  className="bg-emerald-500 h-1.5 rounded transition-all" 
-                  style={{ width: `${data.all_scores.Hypertrophic * 100}%` }}
-                />
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between text-neutral-400 mb-1">
-                <span>Keloid:</span>
-                <span>{(data.all_scores.Keloid * 100).toFixed(1)}%</span>
-              </div>
-              <div className="w-full bg-neutral-800 h-1.5 rounded">
-                <div 
-                  className="bg-emerald-500 h-1.5 rounded transition-all" 
-                  style={{ width: `${data.all_scores.Keloid * 100}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-```
